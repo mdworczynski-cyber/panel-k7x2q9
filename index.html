@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="XTB">
+<title>XTB Monitor</title>
+<style>
+  body{margin:0;padding:env(safe-area-inset-top) 12px 12px;background:#0b0f19;color:#f8fafc;font-family:monospace,sans-serif}
+  select{background:#0f172a;color:#38bdf8;border:1px solid #334155;border-radius:6px;padding:6px;margin:8px 0;width:100%;font-size:16px}
+  .card{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px}
+  .bar{position:relative;height:16px;background:#1e293b;border:1px solid #475569;border-radius:6px;margin:8px 0}
+  #slider{position:absolute;top:-3px;width:8px;height:22px;background:#f59e0b;border:2px solid #fff;border-radius:3px;transform:translateX(-50%);transition:left .3s}
+  #pnl{font-size:32px;font-weight:bold}
+  #pos{background:#020617;border:1px solid #334155;border-radius:6px;padding:8px;font-size:12px;min-height:80px}
+</style>
+</head>
+<body>
+<select id="acc">
+  <option value="Konto_1_Edge">EDGE</option>
+  <option value="Konto_2_Firefox">FIREFOX</option>
+  <option value="Konto_3_Chrom">CHROM</option>
+  <option value="Konto_4_Opera">OPERA</option>
+</select>
+
+<div class="card">
+  <div>PnL: <span id="pnl">--</span></div>
+  <div style="display:flex;justify-content:space-between;font-size:12px">
+    <span style="color:#f87171">DÓŁ: <b id="in">--</b></span>
+    <span style="color:#34d399">GÓRA: <b id="out">--</b></span>
+  </div>
+  <div class="bar"><div id="slider" style="left:50%"></div></div>
+  <div id="status" style="text-align:center;font-size:11px;color:#64748b">Szukanie...</div>
+  <div style="font-size:11px;color:#94a3b8;margin:8px 0 4px">UKŁAD POZYCJI:</div>
+  <div id="pos">Oczekuje...</div>
+  <div id="time" style="font-size:10px;color:#475569;text-align:right;margin-top:6px">Live: --</div>
+</div>
+
+<script>
+const FIREBASE_URL = "https://xtbmonitor-default-rtdb.europe-west1.firebasedatabase.app/";
+const $ = id => document.getElementById(id);
+const fmt = v => (v==null||isNaN(v)) ? '--' : (v>=0?'+':'')+v.toFixed(2);
+
+const sel = $('acc');
+try { sel.value = localStorage.getItem('xtb_acc') || sel.value; } catch(e){}
+sel.onchange = () => { try{localStorage.setItem('xtb_acc', sel.value);}catch(e){} refresh(); };
+
+async function refresh(){
+  try{
+    const r = await fetch(FIREBASE_URL + "accounts/" + sel.value + ".json", {cache:"no-store"});
+    const d = await r.json();
+    if(!d) return;
+    $('pnl').textContent = fmt(d.pnl);
+    $('pnl').style.color = d.pnl>=0 ? '#10b981' : '#ef4444';
+    $('in').textContent = fmt(d.inVal);
+    $('out').textContent = fmt(d.outVal);
+    if(d.posHtml) $('pos').innerHTML = d.posHtml;
+
+    const range = d.outVal - d.inVal;
+    if(range>0){
+      const pct = (d.pnl - d.inVal)/range*100;
+      const s = $('slider'), st = $('status');
+      if(pct<0){ s.style.left='0%'; s.style.background='#ef4444'; st.textContent='🔻 PRZEBICIE!'; st.style.color='#f87171'; }
+      else if(pct>100){ s.style.left='100%'; s.style.background='#10b981'; st.textContent='🟢 PRZEBICIE!'; st.style.color='#34d399'; }
+      else { s.style.left=pct+'%'; s.style.background='#f59e0b'; st.textContent='W zakresie'; st.style.color='#94a3b8'; }
+    }
+    if(d.updatedAt){
+      const diff = Math.round((Date.now()-d.updatedAt)/1000);
+      $('time').textContent = 'Live: '+diff+'s temu';
+      $('time').style.color = diff<10 ? '#34d399' : '#f87171';
+    }
+  }catch(e){ $('status').textContent = 'Brak połączenia'; }
+}
+setInterval(refresh, 2000); refresh();
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refresh(); });
+</script>
+</body>
+</html>
